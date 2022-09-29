@@ -2,7 +2,7 @@
 title: "HW1"
 author: "shuhei kaneko"
 date: "2022-09-24"
-output: html_document
+output: pdf_document
 ---
 
 # Machine Learning Basic Ideas
