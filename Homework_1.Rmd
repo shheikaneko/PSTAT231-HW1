@@ -1,7 +1,7 @@
 ---
-title: "HW1"
-author: "shuhei kaneko"
-date: "2022-09-24"
+title: "Homework_1"
+author: "Shuhei Kaneko"
+date: "2022-09-29"
 output: pdf_document
 ---
 
@@ -163,3 +163,4 @@ ex8 <- mpg %>%
 
 plot(ex8)
 ```
+
