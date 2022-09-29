@@ -124,6 +124,9 @@ mpg_2 <- data.frame(mpg$displ, mpg$cyl, mpg$cty, mpg$hwy)
 M <- cor(mpg_2)
 corrplot(M, method = 'number', type = "lower")
 ```
+City miles per gallon and highway miles per gallon have very high positive correlation, which seems to be very natural.
+Number of cylinder has negative correlation with cty and hty. This is because cars with many number of cylinder are more likely to be luxury car or super car. These types of car do not have a good fuel efficiency.
+The similar can be said about the displacement level. It is very natural that the cars with high displacement does not have good fuel efficiency, and also should be positively correlated with the number of cylinders.
 
 ## Exercise 6
 
