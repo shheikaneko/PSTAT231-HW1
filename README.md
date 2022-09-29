@@ -1,1 +1,3 @@
-# PSTAT231-HW1
+# PSTAT231-Homework Repository
+## Shuhei Kaneko
+
