@@ -1,0 +1,242 @@
+---
+title: "Homework 3"
+author: "Shuhei Kaneko"
+date: "`r format(Sys.time(), '%Y/%m/%d')`"
+output: pdf_document
+---
+
+```{r, message = FALSE}
+library(tidyverse) 
+library(tidymodels)
+library(ggplot2)
+library(corrplot)
+library(discrim)
+library(klaR)
+library(yardstick)
+```
+
+```{r, message = FALSE}
+titanic <- read_csv("titanic.csv")
+
+titanic <- titanic %>% 
+  mutate(survived = as.factor(survived)) %>% 
+  mutate(pclass = as.factor(pclass)) 
+```
+
+### Question 1
+
+```{r}
+set.seed(10)
+
+titanic_split <- initial_split(titanic, prop = 0.80,
+                                strata = survived)
+titanic_train <- training(titanic_split)
+titanic_test <- testing(titanic_split)
+```
+
+The stratification based on outcome will equate the fraction of y between training and test sample. Without using it, the fraction of y in test data could be very different from that in training data, which give us poor performance of our model.
+
+### Question 2
+
+```{r}
+titanic_train2 <- titanic_train %>% 
+  mutate(survived_dummy = ifelse(survived == "Yes", 1, 0))
+
+hist_survived <- titanic_train %>%  
+  ggplot(aes(survived)) +
+  geom_bar() +
+  theme_minimal()
+plot(hist_survived)
+
+summary(tibble(titanic_train2$survived_dummy))
+```
+
+Around 38% of passengers survived.
+
+### Question 3
+
+```{r}
+titanic_train2 %>% 
+  dplyr::select(age, sib_sp, parch, fare, survived_dummy) %>% 
+  cor(use = "complete.obs") %>% 
+  corrplot(method = "number", type = "lower")
+```
+
+More expensive fare have positive correlation with survival probability. It is noteworthy that passenger age have negative correlation with \# of sibling and spouse, or \# of parents and children. \# of sibling and spouse and \# of parents and children has a positive correlation.
+
+### Question 4
+```{r}
+titanic_recipe <- recipe(survived ~ pclass + sex + age + sib_sp + parch + fare, data = titanic_train) %>%
+  step_impute_linear(age, impute_with = imp_vars(pclass, sex, sib_sp, parch, fare)) %>%
+  step_dummy(all_nominal_predictors()) %>%
+  step_interact(terms = ~ starts_with("sex"):fare) %>%
+  step_interact(terms = ~ age:fare)
+```
+
+### Question 5
+```{r}
+# Engine
+log_reg <- logistic_reg() %>% 
+  set_engine("glm") %>% 
+  set_mode("classification")
+
+# Workflow
+log_wkflow <- workflow() %>% 
+  add_model(log_reg) %>% 
+  add_recipe(titanic_recipe)
+
+log_fit <- fit(log_wkflow, titanic_train)
+```
+
+### Question 6
+```{r}
+# Engine
+lda <- discrim_linear() %>% 
+  set_engine("MASS") %>% 
+  set_mode("classification")
+
+# Workflow
+lda_wkflow <- workflow() %>%
+  add_model(lda) %>% 
+  add_recipe(titanic_recipe)
+
+lda_fit <- fit(lda_wkflow, titanic_train)
+```
+
+### Question 7
+```{r}
+# Engine
+qda <- discrim_quad() %>% 
+  set_engine("MASS") %>% 
+  set_mode("classification")
+
+# Workflow
+qda_wkflow <- workflow() %>%
+  add_model(qda) %>% 
+  add_recipe(titanic_recipe)
+
+qda_fit <- fit(qda_wkflow, titanic_train)
+```
+
+### Question 8
+```{r}
+nb <- naive_Bayes() %>% 
+  set_mode("classification") %>% 
+  set_engine("klaR") %>% 
+  set_args(usekernel = FALSE) 
+
+nb_wkflow <- workflow() %>% 
+  add_model(nb) %>% 
+  add_recipe(titanic_recipe)
+
+nb_fit <- fit(nb_wkflow, titanic_train)
+```
+
+### Question 9
+```{r, warning=FALSE}
+pred_log <- predict(log_fit, new_data = titanic_train, type = "prob")
+pred_lda <- predict(lda_fit, new_data = titanic_train, type = "prob")
+pred_qda <- predict(qda_fit, new_data = titanic_train, type = "prob")
+pred_nb <- predict(nb_fit, new_data = titanic_train, type = "prob")
+```
+
+```{r}
+predictions <- bind_cols(pred_log[,2], pred_lda[,2], pred_qda[,2], pred_nb[,2])
+colnames(predictions) <- c("Logistic", "LDA", "QDA", "NB")
+
+predictions
+```
+* Logistic
+```{r}
+augment(log_fit, new_data = titanic_train) %>%
+  conf_mat(truth = survived, estimate = .pred_class)
+```
+* LDA
+```{r}
+augment(lda_fit, new_data = titanic_train) %>%
+  conf_mat(truth = survived, estimate = .pred_class)
+```
+* QDA
+```{r}
+augment(qda_fit, new_data = titanic_train) %>%
+  conf_mat(truth = survived, estimate = .pred_class)
+```
+* Naive Bayes
+```{r, warning=FALSE}
+augment(nb_fit, new_data = titanic_train) %>%
+  conf_mat(truth = survived, estimate = .pred_class)
+```
+#### Accuracy meausre of each method
+* Logistic
+```{r}
+log_acc <- augment(log_fit, new_data = titanic_train) %>%
+  accuracy(truth = survived, estimate = .pred_class)
+log_acc
+```
+* LDA
+```{r}
+lda_acc <- augment(lda_fit, new_data = titanic_train) %>%
+  accuracy(truth = survived, estimate = .pred_class)
+```
+* QDA
+```{r}
+qda_acc <- augment(qda_fit, new_data = titanic_train) %>%
+  accuracy(truth = survived, estimate = .pred_class)
+```
+* Naive Bayes
+```{r, warning=FALSE}
+nb_acc <- augment(nb_fit, new_data = titanic_train) %>%
+  accuracy(truth = survived, estimate = .pred_class)
+```
+```{r}
+accuracies <- c(log_acc$.estimate, lda_acc$.estimate, 
+                qda_acc$.estimate, nb_acc$.estimate)
+models <- c("Logistic", "LDA", "QDA", "Naive Bayes")
+results <- tibble(accuracies = accuracies, models = models)
+results %>% 
+  arrange(-accuracies)
+```
+The above results suggest that Logistic regression is the best model among four strategies.
+
+### Question 10
+```{r, warning=FALSE}
+log_roc_test <- augment(log_fit, new_data = titanic_test) %>%
+  roc_curve(survived, .pred_No)
+log_roc_test <- log_roc_test %>% mutate(model = "Logistic")
+
+lda_roc_test <- augment(lda_fit, new_data = titanic_test) %>%
+  roc_curve(survived, .pred_No)
+lda_roc_test <- lda_roc_test %>% mutate(model = "LDA")
+
+qda_roc_test <- augment(qda_fit, new_data = titanic_test) %>%
+  roc_curve(survived, .pred_No)
+qda_roc_test <- qda_roc_test %>% mutate(model = "QDA")
+
+nb_roc_test <- augment(nb_fit, new_data = titanic_test) %>%
+  roc_curve(survived, .pred_No)
+nb_roc_test <- nb_roc_test %>% mutate(model = "Naive Bayes")
+
+output_dataset <- log_roc_test %>%
+  bind_rows(lda_roc_test) %>%
+  bind_rows(qda_roc_test) %>%
+  bind_rows(nb_roc_test)
+
+output_dataset %>%
+ group_by(model) %>%
+  ggplot(aes(x = (1 - specificity), y = sensitivity)) +
+ geom_line(aes(color = model)) +
+ geom_abline(linetype = 3) +
+ theme_bw()
+```
+### Question 11
+$$
+\begin{aligned}
+  p &= \frac{e^z}{1 + e^z} \\
+  &\Rightarrow p(1 + e^z) = e^z \\
+  &\Rightarrow p = e^z(1-p) \\
+  &\Rightarrow e^z = \frac{p}{1-p}\\
+  &\Rightarrow z(p) = \ln \left( \frac{p}{1-p} \right)
+\end{aligned}
+$$
+
+### Question 12
