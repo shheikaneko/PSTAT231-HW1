@@ -1,7 +1,0 @@
----
-title: "Homework 3"
-author: "Shuhei Kaneko"
-date: "2022-10-04"
-output: pdf_document
----
-
