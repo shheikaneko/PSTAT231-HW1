@@ -65,6 +65,7 @@ titanic_train2 %>%
 More expensive fare have positive correlation with survival probability. It is noteworthy that passenger age have negative correlation with \# of sibling and spouse, or \# of parents and children. \# of sibling and spouse and \# of parents and children has a positive correlation.
 
 ### Question 4
+
 ```{r}
 titanic_recipe <- recipe(survived ~ pclass + sex + age + sib_sp + parch + fare, data = titanic_train) %>%
   step_impute_linear(age, impute_with = imp_vars(pclass, sex, sib_sp, parch, fare)) %>%
@@ -74,6 +75,7 @@ titanic_recipe <- recipe(survived ~ pclass + sex + age + sib_sp + parch + fare, 
 ```
 
 ### Question 5
+
 ```{r}
 # Engine
 log_reg <- logistic_reg() %>% 
@@ -89,6 +91,7 @@ log_fit <- fit(log_wkflow, titanic_train)
 ```
 
 ### Question 6
+
 ```{r}
 # Engine
 lda <- discrim_linear() %>% 
@@ -104,6 +107,7 @@ lda_fit <- fit(lda_wkflow, titanic_train)
 ```
 
 ### Question 7
+
 ```{r}
 # Engine
 qda <- discrim_quad() %>% 
@@ -119,6 +123,7 @@ qda_fit <- fit(qda_wkflow, titanic_train)
 ```
 
 ### Question 8
+
 ```{r}
 nb <- naive_Bayes() %>% 
   set_mode("classification") %>% 
@@ -133,6 +138,7 @@ nb_fit <- fit(nb_wkflow, titanic_train)
 ```
 
 ### Question 9
+
 ```{r, warning=FALSE}
 pred_log <- predict(log_fit, new_data = titanic_train, type = "prob")
 pred_lda <- predict(lda_fit, new_data = titanic_train, type = "prob")
@@ -146,48 +152,71 @@ colnames(predictions) <- c("Logistic", "LDA", "QDA", "NB")
 
 predictions
 ```
-* Logistic
+
+-   Logistic
+
 ```{r}
 augment(log_fit, new_data = titanic_train) %>%
   conf_mat(truth = survived, estimate = .pred_class)
 ```
-* LDA
+
+-   LDA
+
 ```{r}
 augment(lda_fit, new_data = titanic_train) %>%
   conf_mat(truth = survived, estimate = .pred_class)
 ```
-* QDA
+
+-   QDA
+
 ```{r}
 augment(qda_fit, new_data = titanic_train) %>%
   conf_mat(truth = survived, estimate = .pred_class)
 ```
-* Naive Bayes
+
+-   Naive Bayes
+
 ```{r, warning=FALSE}
 augment(nb_fit, new_data = titanic_train) %>%
   conf_mat(truth = survived, estimate = .pred_class)
 ```
+
 #### Accuracy meausre of each method
-* Logistic
+
+-   Logistic
+
 ```{r}
 log_acc <- augment(log_fit, new_data = titanic_train) %>%
   accuracy(truth = survived, estimate = .pred_class)
 log_acc
 ```
-* LDA
+
+-   LDA
+
 ```{r}
 lda_acc <- augment(lda_fit, new_data = titanic_train) %>%
   accuracy(truth = survived, estimate = .pred_class)
+lda_acc
 ```
-* QDA
+
+-   QDA
+
 ```{r}
 qda_acc <- augment(qda_fit, new_data = titanic_train) %>%
   accuracy(truth = survived, estimate = .pred_class)
+
+qda_acc
 ```
-* Naive Bayes
+
+-   Naive Bayes
+
 ```{r, warning=FALSE}
 nb_acc <- augment(nb_fit, new_data = titanic_train) %>%
   accuracy(truth = survived, estimate = .pred_class)
+
+nb_acc
 ```
+
 ```{r}
 accuracies <- c(log_acc$.estimate, lda_acc$.estimate, 
                 qda_acc$.estimate, nb_acc$.estimate)
@@ -196,39 +225,45 @@ results <- tibble(accuracies = accuracies, models = models)
 results %>% 
   arrange(-accuracies)
 ```
+
 The above results suggest that Logistic regression is the best model among four strategies.
 
 ### Question 10
-```{r, warning=FALSE}
-log_roc_test <- augment(log_fit, new_data = titanic_test) %>%
-  roc_curve(survived, .pred_No)
-log_roc_test <- log_roc_test %>% mutate(model = "Logistic")
 
-lda_roc_test <- augment(lda_fit, new_data = titanic_test) %>%
-  roc_curve(survived, .pred_No)
-lda_roc_test <- lda_roc_test %>% mutate(model = "LDA")
+-   Prediction for testing data
 
-qda_roc_test <- augment(qda_fit, new_data = titanic_test) %>%
-  roc_curve(survived, .pred_No)
-qda_roc_test <- qda_roc_test %>% mutate(model = "QDA")
-
-nb_roc_test <- augment(nb_fit, new_data = titanic_test) %>%
-  roc_curve(survived, .pred_No)
-nb_roc_test <- nb_roc_test %>% mutate(model = "Naive Bayes")
-
-output_dataset <- log_roc_test %>%
-  bind_rows(lda_roc_test) %>%
-  bind_rows(qda_roc_test) %>%
-  bind_rows(nb_roc_test)
-
-output_dataset %>%
- group_by(model) %>%
-  ggplot(aes(x = (1 - specificity), y = sensitivity)) +
- geom_line(aes(color = model)) +
- geom_abline(linetype = 3) +
- theme_bw()
+```{r}
+log_acc_test <- augment(log_fit, new_data = titanic_test) %>%
+  accuracy(truth = survived, estimate = .pred_class)
+log_acc_test
 ```
+
+Accuracy is about 77%
+
+-   Confusion matrix
+
+```{r}
+augment(log_fit, new_data = titanic_test) %>%
+  conf_mat(truth = survived, estimate = .pred_class)
+```
+
+-   ROC curve and AUC
+
+```{r}
+augment(log_fit, new_data = titanic_test) %>%
+  roc_curve(survived, .pred_No) %>%
+  autoplot()
+```
+
+```{r}
+augment(log_fit, new_data = titanic_test) %>%
+  roc_auc(survived, .pred_No) 
+```
+
+AUC is 0.8238.
+
 ### Question 11
+
 $$
 \begin{aligned}
   p &= \frac{e^z}{1 + e^z} \\
@@ -240,3 +275,7 @@ $$
 $$
 
 ### Question 12
+
+Increase in $x_1$ by two will induce increase in $log(odds)$ by $2\beta_1$. Therefore, odds increase by $e^{2\beta_1}$.
+
+When $\beta_1$ is negative, $z$ approaches to $-\infty$ as $x_1 \rightarrow \infty$, that is, $p$ approaches to 0. On the other hand, as $x_1 \rightarrow - \infty$, $p$ approaches to 1.
