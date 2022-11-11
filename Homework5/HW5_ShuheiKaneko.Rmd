@@ -1,0 +1,244 @@
+---
+title: "Homework 5"
+author: "Shuhei Kaneko"
+date: "2022-11-11"
+output: html_document
+---
+
+### Question 1
+
+First, import packages necessary for this HW.
+
+```{r, message=FALSE, warning=FALSE}
+library(janitor)
+library(tidyverse)
+library(tidymodels)
+library(ggplot2)
+library(glmnet)
+library(patchwork)
+```
+
+```{r, message=FALSE, warning=FALSE}
+pokemon <- read_csv("data/Pokemon.csv")
+
+pokemon <- clean_names(pokemon)
+```
+
+By using clean_names function, the variable name \# is replaced with number, and name of all the other variables is changed to snake_case. By this arrangement, we will not be stressed out alternative use of upper and lower case letters.
+
+### Question 2
+
+```{r}
+#pokemon <- pokemon %>% 
+#  mutate(type_1 = as.factor(type_1)) %>% 
+#  mutate(type_2 = as.factor(type_2))
+
+hist_type_1 <- pokemon %>%  
+  ggplot(aes(type_1)) +
+  geom_bar() +
+  theme(text = element_text(size = 7)) 
+plot(hist_type_1)
+
+pokemon <- pokemon %>% 
+  filter(type_1 == "Bug" | type_1 == "Fire" |              
+        type_1 == "Grass" | type_1 == "Normal" |
+        type_1 == "Water" | type_1 == "Psychic")
+
+pokemon <- pokemon %>% 
+  mutate(legendary = as.factor(legendary)) %>% 
+  mutate(type_1 = as.factor(type_1)) %>% 
+  mutate(generation = as.factor(generation))
+```
+
+The number of categories is 18. The pokemons whose first type is flying is very few.
+
+### Question 3
+
+```{r}
+# split & stratify the data
+set.seed(12345)
+
+pokemon_split <- initial_split(pokemon, prop = 0.80,              strata = type_1)
+pokemon_train <- training(pokemon_split)
+pokemon_test <- testing(pokemon_split)
+```
+
+```{r}
+dim(pokemon_train)
+```
+
+```{r}
+dim(pokemon_test)
+```
+
+```{r}
+#5 fold CV
+pokemon_folds <- vfold_cv(pokemon_train, strata = type_1, v = 5)
+```
+
+### Question 4
+
+```{r}
+pokemon_recipe <- recipe(type_1 ~ 
+                           legendary + generation +
+                           sp_atk + attack + speed + 
+                           defense + hp + sp_def, 
+                         data = pokemon_train) %>%
+  step_novel(all_nominal_predictors()) %>% 
+  step_dummy(legendary) %>%
+  step_dummy(generation) %>% 
+  step_zv(all_predictors()) %>% 
+  step_center(all_predictors()) %>%
+  step_scale(all_predictors())  
+```
+
+### Question 5
+
+```{r}
+#Model
+elastic_net <- multinom_reg(mixture = tune(), penalty = tune()) %>%
+  set_mode("classification") %>% 
+  set_engine("glmnet")
+ 
+# Workflow
+wkflow <- workflow() %>% 
+  add_model(elastic_net) %>% 
+  add_recipe(pokemon_recipe)
+
+# set up the grid
+mixture_penalty_grid <- grid_regular(penalty(range = c(-5, 5)),     mixture(range = c(0,1)), levels = 10)
+
+mixture_penalty_grid
+```
+
+Eventually, we fit 10 (mixture grids) \* 10 (penalty grids) \* 5 (\# of fold) = 500 models.
+
+### Question 6
+
+```{r, eval=FALSE}
+tuning_res <- tune_grid(
+  wkflow,
+  resamples = pokemon_folds, 
+  grid = mixture_penalty_grid
+)
+save(tuning_res, 
+     file = "tuning_result.rda")
+```
+
+```{r}
+load(file = "tuning_result.rda")
+```
+
+Run autoplot() function:
+
+```{r}
+
+autoplot(tuning_res)
+```
+
+### Question 7
+```{r}
+best_penalty_mixture <- select_best(tuning_res, metric = "roc_auc")
+best_penalty_mixture
+```
+
+Fit the model to training set and evaluate the performance in testing set.
+
+### Question 8
+```{r}
+elastic_net_final <- finalize_workflow(wkflow, best_penalty_mixture)
+
+#Fit to training set
+elasnet_final_fit <- fit(elastic_net_final, data = pokemon_train)
+
+augment(elasnet_final_fit, new_data = pokemon_test) %>%
+  accuracy(truth = type_1, estimate = .pred_class)
+
+pokemon_test <- pokemon_test %>% 
+  mutate(type_1_bug = if_else(type_1 == "Bug", 0, 1)) %>%
+  mutate(type_1_fire = if_else(type_1 == "Fire", 0, 1)) %>%
+  mutate(type_1_grass = if_else(type_1 == "Grass", 0, 1)) %>%
+  mutate(type_1_normal = if_else(type_1 == "Normal", 0, 1)) %>%
+  mutate(type_1_water = if_else(type_1 == "Water", 0, 1)) %>%
+  mutate(type_1_psychic = if_else(type_1 == "Psychic", 0, 1)) %>%
+  mutate(type_1_bug = as.factor(type_1_bug)) %>% 
+  mutate(type_1_fire = as.factor(type_1_fire)) %>% 
+  mutate(type_1_grass = as.factor(type_1_grass)) %>% 
+  mutate(type_1_normal = as.factor(type_1_normal)) %>% 
+  mutate(type_1_water = as.factor(type_1_water)) %>% 
+  mutate(type_1_psychic = as.factor(type_1_psychic))
+
+bug <- augment(elasnet_final_fit, new_data = pokemon_test) %>%
+  roc_curve(truth = type_1_bug, estimate = .pred_Bug) %>% 
+  autoplot()
+bug <- bug + ggtitle("Bug")
+
+fire <- augment(elasnet_final_fit, new_data = pokemon_test) %>%
+  roc_curve(truth = type_1_fire, estimate = .pred_Fire) %>% 
+  autoplot()
+
+fire <- fire + ggtitle("Fire")
+
+grass <- augment(elasnet_final_fit, new_data = pokemon_test) %>%
+  roc_curve(truth = type_1_grass, estimate = .pred_Grass) %>% 
+  autoplot()
+
+grass <- grass + ggtitle("Grass")
+
+normal <- augment(elasnet_final_fit, new_data = pokemon_test) %>%
+  roc_curve(truth = type_1_normal, estimate = .pred_Normal)%>%
+  autoplot()
+
+normal <- normal + ggtitle("Normal")
+
+water <- augment(elasnet_final_fit, new_data = pokemon_test) %>%
+  roc_curve(truth = type_1_water, estimate = .pred_Water) %>% 
+  autoplot(title = "Water")
+
+water <- water + ggtitle("Water")
+
+psychic <- augment(elasnet_final_fit, new_data = pokemon_test) %>%
+roc_curve(truth = type_1_psychic,estimate = .pred_Psychic) %>%
+  autoplot(title = Psychic)
+
+psychic <- psychic + ggtitle("Psychic")
+
+roc_plots <- bug + fire + grass + normal + water + psychic
+```
+The comparison of ROC curves:
+```{r}
+roc_plots
+```
+Confusion matrix:
+```{r}
+augment(elasnet_final_fit, new_data = pokemon_test) %>%
+  conf_mat(truth = type_1, estimate = .pred_class) %>% 
+  autoplot(type = "heatmap")
+```
+
+The prediction for Normal type performs the highest accuracy. Normal-type Pokemon tend to have high HP, which makes easier to predict with a given explanatory variable (as predictor contains hp). On the other hand, the prediction for Grass type is worst. This might be because Grass-type Pokemon do not have outstanding ability values.
+
+### Question 9
+
+```{r}
+missed <- as_tibble(rep(0,464))
+made <- as_tibble(rep(1,337))
+shots <- bind_rows(missed, made)
+
+#bootstrap
+shots_boots <- bootstraps(shots, times = 1000)
+boot_res <- map_dbl(
+  shots_boots$splits,
+  function(x) {
+    dat <- as.data.frame(x)$value
+    mean(dat == 1)
+  }
+)
+
+ci99 <- c(quantile(boot_res, 0.005),
+          mean(boot_res),
+          quantile(boot_res, 0.995))
+ci99
+```
+
+Bootstrap 99% CI: [0.3733, 0.4669].
