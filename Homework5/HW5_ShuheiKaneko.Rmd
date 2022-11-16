@@ -1,7 +1,7 @@
 ---
 title: "Homework 5"
 author: "Shuhei Kaneko"
-date: "2022-11-11"
+date: "2022-11-16"
 output: html_document
 ---
 
@@ -75,6 +75,7 @@ dim(pokemon_test)
 #5 fold CV
 pokemon_folds <- vfold_cv(pokemon_train, strata = type_1, v = 5)
 ```
+By stratifying the folding data, we can keep distribution of outcome even across the folded datasets. By doing so, the performance of model would not be significantly affected by anomaly distribution of outcome.
 
 ### Question 4
 
@@ -135,6 +136,8 @@ Run autoplot() function:
 
 autoplot(tuning_res)
 ```
+
+Too large penalty produces worse prediction. Regarding mixture, relatively small value yields better prediction result. Best combination was (penalty, mixture) = (0.0215 ,0.444).
 
 ### Question 7
 ```{r}
